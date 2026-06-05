@@ -12,7 +12,7 @@ jobs:
           - platform: 2
             platform_name: ios
 
-    runs-on: macos-13          # CHANGED: was macos-latest (pointed to self-hosted runner)
+    runs-on: macos-15          # CHANGED: was macos-latest (pointed to self-hosted runner)
 
     steps:
       # REMOVED: "Remove work folders" step (used ELLIE_MINI_SECRET for self-hosted runner)
