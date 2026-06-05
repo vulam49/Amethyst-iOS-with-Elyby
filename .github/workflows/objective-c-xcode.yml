@@ -1,0 +1,46 @@
+name: Build IPA
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: brew install cmake ldid wget
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      - name: Verify Java 8
+        run: |
+          java -version
+          javac -version
+          echo "JAVA_HOME=$JAVA_HOME"
+          # Force the Makefile to use the correct JDK 8 path
+          echo "BOOTJDK=$JAVA_HOME/bin" >> $GITHUB_ENV
+
+      - name: Build
+        run: |
+          make \
+            TROLLSTORE_JIT_ENT=1 \
+            RELEASE=1 \
+            SLIMMED=1 \
+            BOOTJDK=$BOOTJDK \
+            SDKPATH=$(xcrun --sdk iphoneos --show-sdk-path)
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Amethyst-IPA
+          path: artifacts/*.tipa
+          retention-days: 7
