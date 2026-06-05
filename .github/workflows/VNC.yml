@@ -1,0 +1,41 @@
+name: macOS VNC Server
+on: [workflow_dispatch]
+
+jobs:
+  setup-vnc:
+    runs-on: macos-15
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set VNC Password
+        id: vnc_password
+        run: |
+          # Generate a random 8-character password for VNC
+          PASSWORD=$(openssl rand -base64 8)
+          echo "VNC_PASSWORD=$PASSWORD" >> $GITHUB_ENV
+          echo "Your VNC Password is: $PASSWORD"
+
+      - name: Enable macOS Screen Sharing (VNC)
+        run: |
+          # Enable Remote Management / Screen Sharing
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -clientopts -setvnclegacy -vnclegacy yes -restart -agent -privs -all
+
+          # Set the VNC password
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvncpw -vncpw "${{ env.VNC_PASSWORD }}"
+
+          # Restart the Apple Remote Desktop agent
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console
+
+      - name: Start Ngrok Tunnel for VNC
+        uses: wenerme/ngrok-action@v2
+        with:
+          authtoken: ${{ secrets.NGROK_AUTH_TOKEN }}
+          proto: tcp
+          addr: 5900
+
+      - name: Keep Runner Alive
+        run: |
+          echo "VNC server is running. Connect to the Ngrok TCP address using a VNC Viewer."
+          echo "The runner will stay alive for 3 hours or until you cancel it."
+          sleep 86400
