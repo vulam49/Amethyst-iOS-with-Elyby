@@ -25,7 +25,7 @@ jobs:
 
       # ADDED: not pre-installed on GitHub hosted runners
       - name: Install dependencies
-        run: brew install ldid wget cmake
+        run: brew install ldid wget cmake make
 
       # ADDED: GitHub runners don't have Java 8 by default
       - name: Set up JDK 8
