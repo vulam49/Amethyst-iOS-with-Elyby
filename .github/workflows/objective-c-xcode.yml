@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
         with:
@@ -15,18 +15,19 @@ jobs:
       - name: Install dependencies
         run: brew install cmake ldid wget
 
-      - name: Set up JDK 8
+      - name: Set up JDK 8 (Zulu)
         uses: actions/setup-java@v4
         with:
           java-version: '8'
-          distribution: 'temurin'
+          distribution: 'zulu'
+          architecture: x64
 
       - name: Verify Java 8
         run: |
           java -version
           javac -version
-          echo "JAVA_HOME=$JAVA_HOME"
-          # Force the Makefile to use the correct JDK 8 path
+          # Must print "1.8.0" — if not, the Makefile will reject it
+          javac -version 2>&1 | grep "1.8.0" || { echo "WRONG JAVA VERSION"; exit 1; }
           echo "BOOTJDK=$JAVA_HOME/bin" >> $GITHUB_ENV
 
       - name: Build
