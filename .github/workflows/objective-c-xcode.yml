@@ -35,7 +35,7 @@ jobs:
           make \
             TROLLSTORE_JIT_ENT=1 \
             RELEASE=1 \
-            SLIMMED=1 \
+            SLIMMED=0 \
             BOOTJDK=$BOOTJDK \
             SDKPATH=$(xcrun --sdk iphoneos --show-sdk-path)
 
