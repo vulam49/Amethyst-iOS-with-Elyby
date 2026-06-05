@@ -1,6 +1,7 @@
 #import <AuthenticationServices/AuthenticationServices.h>
 
 #import "authenticator/BaseAuthenticator.h"
+#import "authenticator/ElyByAuthenticator.h"
 #import "AccountListViewController.h"
 #import "AFNetworking.h"
 #import "LauncherPreferences.h"
@@ -68,6 +69,9 @@
         // Remove the prefix "Demo."
         cell.textLabel.text = [selected[@"username"] substringFromIndex:5];
         cell.detailTextLabel.text = localize(@"login.option.demo", nil);
+    } else if ([selected[@"accountType"] isEqualToString:@"Ely.by"]) {
+        // Ely.by account — show provider name as subtitle
+        cell.detailTextLabel.text = @"Ely.by";
     } else if (selected[@"xboxGamertag"] == nil) {
         cell.detailTextLabel.text = localize(@"login.option.local", nil);
     } else {
@@ -104,15 +108,14 @@
 
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
     if (editingStyle == UITableViewCellEditingStyleDelete) {
-        // TODO: invalidate token
-
         NSString *str = self.accountList[indexPath.row][@"username"];
+        NSDictionary *account = self.accountList[indexPath.row];
         NSFileManager *fm = [NSFileManager defaultManager];
         NSString *path = [NSString stringWithFormat:@"%s/accounts/%@.json", getenv("POJAV_HOME"), str];
         if (self.whenDelete != nil) {
             self.whenDelete(str);
         }
-        NSString *xuid = self.accountList[indexPath.row][@"xuid"];
+        NSString *xuid = account[@"xuid"];
         if (xuid) {
             [MicrosoftAuthenticator clearTokenDataOfProfile:xuid];
         }
@@ -142,14 +145,24 @@
 
 - (void)actionAddAccount:(UITableViewCell *)sender {
     UIAlertController *picker = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+
     UIAlertAction *actionMicrosoft = [UIAlertAction actionWithTitle:localize(@"login.option.microsoft", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self actionLoginMicrosoft:sender];
     }];
     [picker addAction:actionMicrosoft];
+
+    // ── Ely.by ──────────────────────────────────────────────────────────────
+    UIAlertAction *actionElyBy = [UIAlertAction actionWithTitle:@"Ely.by" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self actionLoginElyBy:sender];
+    }];
+    [picker addAction:actionElyBy];
+    // ────────────────────────────────────────────────────────────────────────
+
     UIAlertAction *actionLocal = [UIAlertAction actionWithTitle:localize(@"login.option.local", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self actionLoginLocal:sender];
     }];
     [picker addAction:actionLocal];
+
     UIAlertAction *cancel = [UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil];
     [picker addAction:cancel];
 
@@ -194,6 +207,65 @@
     [self presentViewController:controller animated:YES completion:nil];
 }
 
+// ── Ely.by login ──────────────────────────────────────────────────────────────
+- (void)actionLoginElyBy:(UITableViewCell *)sender {
+    UIAlertController *controller = [UIAlertController
+        alertControllerWithTitle:@"Ely.by"
+        message:localize(@"Sign in with your Ely.by account", nil)
+        preferredStyle:UIAlertControllerStyleAlert];
+
+    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"Username or email";
+        textField.keyboardType = UIKeyboardTypeEmailAddress;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.borderStyle = UITextBorderStyleRoundedRect;
+    }];
+    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = localize(@"login.alert.field.password", nil) ?: @"Password";
+        textField.secureTextEntry = YES;
+        textField.borderStyle = UITextBorderStyleRoundedRect;
+    }];
+
+    [controller addAction:[UIAlertAction
+        actionWithTitle:localize(@"OK", nil)
+        style:UIAlertActionStyleDefault
+        handler:^(UIAlertAction *action) {
+            NSString *username = controller.textFields[0].text;
+            NSString *password = controller.textFields[1].text;
+
+            if (username.length == 0 || password.length == 0) {
+                controller.message = @"Please enter your username/email and password.";
+                [self presentViewController:controller animated:YES completion:nil];
+                return;
+            }
+
+            self.modalInPresentation = YES;
+            self.tableView.userInteractionEnabled = NO;
+            [self addActivityIndicatorTo:sender];
+
+            // Pass credentials as "username\npassword" — ElyByAuthenticator.m splits on \n
+            NSString *input = [NSString stringWithFormat:@"%@\n%@", username, password];
+            ElyByAuthenticator *auth = [[ElyByAuthenticator alloc] initWithInput:input];
+
+            id callback = ^(id status, BOOL success) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self callbackMicrosoftAuth:status success:success forCell:sender];
+                });
+            };
+            [auth loginWithCallback:callback];
+    }]];
+
+    [controller addAction:[UIAlertAction
+        actionWithTitle:localize(@"Cancel", nil)
+        style:UIAlertActionStyleCancel
+        handler:nil]];
+
+    [self presentViewController:controller animated:YES completion:nil];
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 - (void)actionLoginMicrosoft:(UITableViewCell *)sender {
     NSURL *url = [NSURL URLWithString:@"https://login.live.com/oauth20_authorize.srf?client_id=00000000402b5328&response_type=code&scope=service%3A%3Auser.auth.xboxlive.com%3A%3AMBI_SSL&redirect_url=https%3A%2F%2Flogin.live.com%2Foauth20_desktop.srf"];
 
@@ -208,7 +280,6 @@
             }
             return;
         }
-        // NSLog(@"URL returned = %@", [callbackURL absoluteString]);
 
         NSDictionary *queryItems = [self parseQueryItems:callbackURL.absoluteString];
         if (queryItems[@"code"]) {
@@ -228,7 +299,6 @@
             [[[MicrosoftAuthenticator alloc] initWithInput:queryItems[@"code"]] loginWithCallback:callback];
         } else {
             if ([queryItems[@"error"] hasPrefix:@"access_denied"]) {
-                // Ignore access denial responses
                 return;
             }
             showDialog(localize(@"Error", nil), queryItems[@"error_description"]);
@@ -268,10 +338,17 @@
             cell.detailTextLabel.text = [status localizedDescription];
             NSData *errorData = ((NSError *)status).userInfo[AFNetworkingOperationFailingURLResponseDataErrorKey];
             NSString *errorStr = [[NSString alloc] initWithData:errorData encoding:NSUTF8StringEncoding];
-            NSLog(@"[MSA] Error: %@", errorStr);
+            // Ely.by errors don't come from AFNetworking, so fall back to localizedDescription
+            if (!errorStr || errorStr.length == 0) {
+                errorStr = [status localizedDescription];
+            }
+            NSLog(@"[Auth] Error: %@", errorStr);
             showDialog(localize(@"Error", nil), errorStr);
         }
     } else if (success) {
+        // Reload the account list to show the newly added account
+        [self viewDidLoad];
+        [self.tableView reloadData];
         self.whenItemSelected();
         [self removeActivityIndicatorFrom:cell];
         [self dismissViewControllerAnimated:YES completion:nil];
