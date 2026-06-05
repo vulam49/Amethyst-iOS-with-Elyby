@@ -1,5 +1,6 @@
 #import <Security/Security.h>
 #import "BaseAuthenticator.h"
+#import "ElyByAuthenticator.h"
 #import "../LauncherPreferences.h"
 #import "../ios_uikit_bridge.h"
 #import "../utils.h"
@@ -29,9 +30,13 @@ static BaseAuthenticator *current = nil;
         return nil;
     }
 
-    if ([authData[@"expiresAt"] longValue] == 0) {
+    // Check accountType first so Ely.by accounts are never
+    // confused with Microsoft accounts (both have expiresAt != 0).
+    if ([authData[@"accountType"] isEqualToString:@"Ely.by"]) {
+        return [[ElyByAuthenticator alloc] initWithData:authData];
+    } else if ([authData[@"expiresAt"] longValue] == 0) {
         return [[LocalAuthenticator alloc] initWithData:authData];
-    } else { 
+    } else {
         return [[MicrosoftAuthenticator alloc] initWithData:authData];
     }
 }
