@@ -16,6 +16,8 @@
 #import "LauncherPreferences.h"
 #import "PLLogOutputView.h"
 #import "PLProfiles.h"
+#import "authenticator/BaseAuthenticator.h"
+#import "authenticator/ElyByAuthenticator.h"
 
 #define fm NSFileManager.defaultManager
 
@@ -101,10 +103,7 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
 int launchJVM(NSString *username, id launchTarget, int width, int height, int minVersion) {
     NSLog(@"[JavaLauncher] Beginning JVM launch");
 
-    init_loadDefaultEnv();
-    init_loadCustomEnv();
-
-    BOOL requiresTXMWorkaround = DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM);
+    BOOL requiresTXMWorkaround = DeviceRequiresTXMWorkaround();
     BOOL jit26AlwaysAttached = getPrefBool(@"debug.debug_always_attached_jit");
     if (requiresTXMWorkaround) {
         static void *result;
@@ -145,6 +144,10 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     } else {
         NSLog(@"[DyldLVBypass] Hook disabled! Loading unsigned dylib will cause code signature error.");
     }
+
+
+    init_loadDefaultEnv();
+    init_loadCustomEnv();
 
     BOOL launchJar = NO;
     NSString *gameDir;
@@ -256,6 +259,19 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchjna_agent.jar=", librariesPath].UTF8String;
     if(getPrefBool(@"general.cosmetica")) {
         margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/arc_dns_injector.jar=23.95.137.176", librariesPath].UTF8String;
+    }
+
+    // Ely.by: redirect Minecraft auth calls to authserver.ely.by via authlib-injector
+    if ([BaseAuthenticator.current isKindOfClass:[ElyByAuthenticator class]]) {
+        NSString *authlibPath = [NSString stringWithFormat:@"%s/authlib-injector.jar", getenv("POJAV_HOME")];
+        if ([NSFileManager.defaultManager fileExistsAtPath:authlibPath]) {
+            margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@=https://authserver.ely.by/", authlibPath].UTF8String;
+            margv[++margc] = "-Dauthlibinjector.side=client";
+            NSLog(@"[ElyBy] authlib-injector injected");
+        } else {
+            NSLog(@"[ElyBy] WARNING: authlib-injector.jar not found at %@", authlibPath);
+            NSLog(@"[ElyBy] Skin/auth validation may fail. Re-login to trigger download.");
+        }
     }
 
     // Workaround random stack guard allocation crashes
