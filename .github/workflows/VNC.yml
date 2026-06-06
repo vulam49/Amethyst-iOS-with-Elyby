@@ -1,42 +1,98 @@
-name: macOS VNC Server
-on: [workflow_dispatch]
+name: macOS VNC + Ngrok
+
+on:
+  workflow_dispatch:
+    inputs:
+      ngrok_authtoken:
+        description: 'Ngrok auth token (from ngrok.com/dashboard)'
+        required: true
+      timeout:
+        description: 'Session timeout (e.g. 1h, 2h, 6h)'
+        required: true
+        default: '2h'
 
 jobs:
-  setup-vnc:
-    runs-on: macos-15
+  vnc:
+    runs-on: macos-13
+    timeout-minutes: 360
+
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set VNC Password
-        id: vnc_password
+      - name: Generate VNC password
         run: |
-          # Generate a random 8-character password for VNC
-          PASSWORD=$(openssl rand -base64 8)
+          PASSWORD=$(openssl rand -base64 8 | tr -d '/+=' | cut -c1-8)
           echo "VNC_PASSWORD=$PASSWORD" >> $GITHUB_ENV
-          echo "Your VNC Password is: $PASSWORD"
+          echo "VNC Password: $PASSWORD"
 
-      - name: Enable macOS Screen Sharing (VNC)
+      - name: Enable Screen Sharing (VNC)
         run: |
-          # Enable Remote Management / Screen Sharing
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -clientopts -setvnclegacy -vnclegacy yes -restart -agent -privs -all
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -activate -configure -access -on \
+            -clientopts -setvnclegacy -vnclegacy yes \
+            -restart -agent -privs -all
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -configure -clientopts -setvncpw -vncpw "$VNC_PASSWORD"
+          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+            -restart -agent -console
+          echo "Screen Sharing enabled on port 5900"
 
-          # Set the VNC password
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvncpw -vncpw "${{ env.VNC_PASSWORD }}"
-
-          # Restart the Apple Remote Desktop agent
-          sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent -console
-
-      - name: Start Ngrok Tunnel for VNC
-        uses: luisboto/ngrok-tunnel-action@0.1.4
-        with:
-          timeout: 6h
-          port: 8080
-          ngrok_authtoken: "2gey0ywcd9yzhHg0SQ3B60R661T_52KAiQRCo8cZkKbWBGT4S"
-          tunnel_type: tcp
-
-      - name: Keep Runner Alive
+      - name: Install ngrok (macOS)
         run: |
-          echo "VNC server is running. Connect to the Ngrok TCP address using a VNC Viewer."
-          echo "The runner will stay alive for 3 hours or until you cancel it."
+          # Download macOS version (not Linux)
+          curl -sSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-amd64.zip -o ngrok.zip
+          unzip -qq ngrok.zip
+          chmod +x ngrok
+          ./ngrok version
+
+      - name: Start ngrok tunnel + print connection info
+        env:
+          NGROK_AUTHTOKEN: "2gey0ywcd9yzhHg0SQ3B60R661T_52KAiQRCo8cZkKbWBGT4S"
+          TIMEOUT: ${{ github.event.inputs.timeout }}
+        run: |
+          # Auth ngrok
+          ./ngrok config add-authtoken "$NGROK_AUTHTOKEN"
+
+          # Start tunnel to VNC port 5900 in background
+          ./ngrok tcp 5900 --log=stdout > ngrok.log 2>&1 &
+          NGROK_PID=$!
+
+          # Wait for tunnel to come up
+          echo "Starting ngrok tunnel..."
+          sleep 8
+
+          # Fetch the public URL from ngrok's local API
+          NGROK_URL=$(curl -s http://localhost:4040/api/tunnels \
+            | python3 -c "import sys,json; t=json.load(sys.stdin)['tunnels']; print(t[0]['public_url'] if t else '')" \
+            2>/dev/null)
+
+          if [ -z "$NGROK_URL" ]; then
+            echo "Failed to get ngrok URL. Check your auth token."
+            cat ngrok.log
+            exit 1
+          fi
+
+          # Extract host and port from tcp://X.tcp.ngrok.io:XXXXX
+          VNC_HOST=$(echo $NGROK_URL | sed 's|tcp://||' | cut -d: -f1)
+          VNC_PORT=$(echo $NGROK_URL | sed 's|tcp://||' | cut -d: -f2)
+
+          echo ""
+          echo "========================================="
+          echo " VNC CONNECTION DETAILS"
+          echo "========================================="
+          echo " Host     : $VNC_HOST"
+          echo " Port     : $VNC_PORT"
+          echo " Password : $VNC_PASSWORD"
+          echo ""
+          echo " Connect string: $VNC_HOST:$VNC_PORT"
+          echo "========================================="
+          echo ""
+          echo " On Mac: open vnc://$VNC_HOST:$VNC_PORT"
+          echo " On Windows: use RealVNC Viewer or TightVNC"
+          echo " On iPhone: use 'VNC Viewer' app by RealVNC"
+          echo ""
+
+          # Keep alive for the timeout duration
+          echo "Session will stay alive for 24"
           sleep 86400
