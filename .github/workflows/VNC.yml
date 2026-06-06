@@ -48,7 +48,7 @@ jobs:
 
       - name: Start ngrok tunnel + print connection info
         env:
-          NGROK_AUTHTOKEN: "2gey0ywcd9yzhHg0SQ3B60R661T_52KAiQRCo8cZkKbWBGT4S"
+          NGROK_AUTHTOKEN: ${{ github.event.inputs.ngrok_authtoken }}
           TIMEOUT: ${{ github.event.inputs.timeout }}
         run: |
           # Auth ngrok
@@ -94,5 +94,5 @@ jobs:
           echo ""
 
           # Keep alive for the timeout duration
-          echo "Session will stay alive for 24"
-          sleep 86400
+          echo "Session will stay alive for $TIMEOUT"
+          sleep $(echo $TIMEOUT | sed 's/h/*3600/' | sed 's/m/*60/' | bc)
