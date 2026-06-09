@@ -8,16 +8,18 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <sys/mman.h>
+#include <mach/mach.h>
 
 #include "utils.h"
 
 #import "ios_uikit_bridge.h"
 #import "JavaLauncher.h"
+#import "authenticator/BaseAuthenticator.h"
+extern BOOL DeviceRequiresTXMWorkaround(void);
 #import "LauncherPreferences.h"
 #import "PLLogOutputView.h"
 #import "PLProfiles.h"
-#import "authenticator/BaseAuthenticator.h"
-#import "authenticator/ElyByAuthenticator.h"
 
 #define fm NSFileManager.defaultManager
 
@@ -262,7 +264,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     }
 
     // Ely.by: redirect Minecraft auth calls to authserver.ely.by via authlib-injector
-    if ([BaseAuthenticator.current isKindOfClass:[ElyByAuthenticator class]]) {
+    if ([BaseAuthenticator.current isKindOfClass:NSClassFromString(@"ElyByAuthenticator")]) {
         NSString *authlibPath = [NSString stringWithFormat:@"%s/authlib-injector.jar", getenv("POJAV_HOME")];
         if ([NSFileManager.defaultManager fileExistsAtPath:authlibPath]) {
             margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@=https://authserver.ely.by/", authlibPath].UTF8String;

@@ -1,3 +1,4 @@
+#include <sys/mman.h>
 #import <SafariServices/SafariServices.h>
 
 #include "jni.h"

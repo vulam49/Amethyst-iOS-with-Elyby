@@ -26,11 +26,3 @@ typedef void(^Callback)(id status, BOOL success);
 + (void)clearTokenDataOfProfile:(NSString *)profile;
 
 @end
-
-@interface ElyByAuthenticator : BaseAuthenticator
-
-/// Downloads authlib-injector.jar to $POJAV_HOME if not already present.
-/// Called automatically after a successful Ely.by login.
-+ (void)ensureAuthlibInjector;
-
-@end

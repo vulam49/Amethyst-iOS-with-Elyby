@@ -1,3 +1,6 @@
+#include <sys/mman.h>
+#include <mach/mach.h>
+#include <mach/mach_error.h>
 #import <Foundation/Foundation.h>
 #import "PLLogOutputView.h"
 #import "SurfaceViewController.h"

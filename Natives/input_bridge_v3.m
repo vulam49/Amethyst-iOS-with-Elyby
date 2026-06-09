@@ -1,3 +1,5 @@
+#include <sys/mman.h>
+#include <mach/vm_param.h>
 /*
  * V3 input bridge implementation.
  *

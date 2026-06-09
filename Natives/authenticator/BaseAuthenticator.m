@@ -1,4 +1,5 @@
 #import <Security/Security.h>
+#import <Security/Security.h>
 #import "BaseAuthenticator.h"
 #import "ElyByAuthenticator.h"
 #import "../LauncherPreferences.h"
@@ -79,6 +80,29 @@ static BaseAuthenticator *current = nil;
         showDialog(@"Error while saving file", error.localizedDescription);
     }
     return error == nil;
+}
+
+@end
+
+@implementation BaseAuthenticator (TokenData)
+
++ (NSDictionary *)tokenDataOfProfile:(NSString *)profile {
+    if (!profile) return nil;
+    NSDictionary *query = @{
+        (id)kSecClass:       (id)kSecClassGenericPassword,
+        (id)kSecAttrService: @"AccountToken",
+        (id)kSecAttrAccount: profile,
+        (id)kSecReturnData:  @YES,
+        (id)kSecMatchLimit:  (id)kSecMatchLimitOne
+    };
+    CFDataRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query,
+                                          (CFTypeRef *)&result);
+    if (status != errSecSuccess || !result) return nil;
+    NSData *data = (__bridge_transfer NSData *)result;
+    return [NSKeyedUnarchiver unarchivedObjectOfClass:[NSDictionary class]
+                                            fromData:data
+                                               error:nil];
 }
 
 @end
